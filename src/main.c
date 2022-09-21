@@ -12,10 +12,14 @@
 #include "ds1820.h"
 #include "wdg.h"
 
+#define SET_BLINK_NUM_MS 100
+#define SET_BLINK_BLANK_MS 50
 #define SHOW_TIME_DELAY_RAM_ADDR 0
 #define SHOW_DATE_DELAY_RAM_ADDR 1
 #define SHOW_DAY_DELAY_RAM_ADDR 2
 #define SHOW_TEMPERATURE_DELAY_RAM_ADDR 3
+#define SHOW_DELAY_MAX 60
+#define SHOW_DELAY_MIN 0
 
 enum {
     showTime,
@@ -132,12 +136,14 @@ int main() {
         WDGreset(); // watchdog reset
         ds1307_get_all(&rtc);
 
-        if ((rtcBuffer.secondL == 0) & (rtc.secondL == 1)) ds1820_startTempMeasure();
-        if ((rtcBuffer.secondL == 5) & (rtc.secondL == 6)) {
-            temp_value_signed = ds1820_getTemp();
-            temp_value_unsigned = (temp_value_signed & 0x00FF);
-            temp_minus = (temp_value_signed >> 8);
-            if (temp_value_unsigned > 50) showTemperature_delay = 0; // sensor error
+        if (clockMode != setShowTemperatureDelay) {
+            if ((rtcBuffer.secondL == 0) & (rtc.secondL == 1)) ds1820_startTempMeasure();
+            if ((rtcBuffer.secondL == 5) & (rtc.secondL == 6)) {
+                temp_value_signed = ds1820_getTemp();
+                temp_value_unsigned = (temp_value_signed & 0x00FF);
+                temp_minus = (temp_value_signed >> 8);
+                if (temp_value_unsigned > 50) showTemperature_delay = 0; // sensor error
+            }
         }
 
         // delay_ms(1000);
@@ -199,9 +205,9 @@ int main() {
 
             case setHour:
                 indicatorSetTime(rtcBuffer.hourH,rtcBuffer.hourL,rtcBuffer.minuteH,rtcBuffer.minuteL);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetTime(10,10,rtcBuffer.minuteH,rtcBuffer.minuteL);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
                 uint8_t hour = bcd2dec((rtcBuffer.hourH << 4) | rtcBuffer.hourL);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setMinute; }
@@ -222,9 +228,9 @@ int main() {
 
             case setMinute:
                 indicatorSetTime(rtcBuffer.hourH,rtcBuffer.hourL,rtcBuffer.minuteH,rtcBuffer.minuteL);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetTime(rtcBuffer.hourH,rtcBuffer.hourL,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
                 uint8_t minute = bcd2dec((rtcBuffer.minuteH << 4) | rtcBuffer.minuteL);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setDate; }
@@ -246,9 +252,9 @@ int main() {
 
             case setDate:
                 indicatorSetDate(rtcBuffer.dateH,rtcBuffer.dateL,rtcBuffer.monthH,rtcBuffer.monthL);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetDate(10,10,rtcBuffer.monthH,rtcBuffer.monthL);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
                 uint8_t date = bcd2dec((rtcBuffer.dateH << 4) | rtcBuffer.dateL);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setMonth; }
@@ -269,9 +275,9 @@ int main() {
 
             case setMonth:
                 indicatorSetDate(rtcBuffer.dateH,rtcBuffer.dateL,rtcBuffer.monthH,rtcBuffer.monthL);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetDate(rtcBuffer.dateH,rtcBuffer.dateL,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
                 uint8_t month = bcd2dec((rtcBuffer.monthH << 4) | rtcBuffer.monthL);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setDay; }
@@ -292,9 +298,9 @@ int main() {
 
             case setDay:
                 indicatorSetDay(rtcBuffer.day);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetNum(10,10,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
                 uint8_t day = bcd2dec(rtcBuffer.day);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setYear; }
@@ -315,9 +321,9 @@ int main() {
 
             case setYear:
                 indicatorSetNum(2, 0, rtcBuffer.yearH, rtcBuffer.yearL);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetNum(2,0,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
                 uint8_t year = bcd2dec((rtcBuffer.yearH << 4) | rtcBuffer.yearL);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setShowTimeDelay; rtcDataChangedFlag = 1; }
@@ -338,17 +344,17 @@ int main() {
 
             case setShowTimeDelay: 
                 indicatorSetNum(1, 10, dec2bcd(showTime_delay) >> 4, dec2bcd(showTime_delay) & 0x0F);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetNum(1,10,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setShowDateDelay; rtcDataChangedFlag = 1; }
 
                 if (readInput(2)) {
-                    if (showTime_delay == 99) showTime_delay = 0; else showTime_delay++;
+                    if (showTime_delay >= SHOW_DELAY_MAX) showTime_delay = SHOW_DELAY_MIN; else showTime_delay++;
                 }
                 else if (readInput(3)){
-                    if (showTime_delay == 0) showTime_delay = 99; else showTime_delay--;
+                    if (showTime_delay <= SHOW_DELAY_MIN) showTime_delay = SHOW_DELAY_MAX; else showTime_delay--;
                 }
                 else break;
 
@@ -360,17 +366,17 @@ int main() {
 
             case setShowDateDelay:
                 indicatorSetNum(2, 10, dec2bcd(showDate_delay) >> 4, dec2bcd(showDate_delay) & 0x0F);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetNum(2,10,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setShowDayDelay; rtcDataChangedFlag = 1; }
 
                 if (readInput(2)) {
-                    if (showDate_delay == 99) showDate_delay = 0; else showDate_delay++;
+                    if (showDate_delay >= SHOW_DELAY_MAX) showDate_delay = SHOW_DELAY_MIN; else showDate_delay++;
                 }
                 else if (readInput(3)) {
-                    if (showDate_delay == 0) showDate_delay = 99; else showDate_delay--;
+                    if (showDate_delay <= SHOW_DELAY_MIN) showDate_delay = SHOW_DELAY_MAX; else showDate_delay--;
                 }
                 else break;
 
@@ -382,17 +388,17 @@ int main() {
 
             case setShowDayDelay:
                 indicatorSetNum(3, 10, dec2bcd(showDay_delay) >> 4, dec2bcd(showDay_delay) & 0x0F);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetNum(3,10,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = setShowTemperatureDelay; rtcDataChangedFlag = 1; }
 
                 if (readInput(2)) {
-                    if (showDay_delay == 99) showDay_delay = 0; else showDay_delay++;
+                    if (showDay_delay >= SHOW_DELAY_MAX) showDay_delay = SHOW_DELAY_MIN; else showDay_delay++;
                 }
                 else if (readInput(3)) {
-                    if (showDay_delay == 0) showDay_delay = 99; else showDay_delay--;
+                    if (showDay_delay <= SHOW_DELAY_MIN) showDay_delay = SHOW_DELAY_MAX; else showDay_delay--;
                 }
                 else break;
 
@@ -404,17 +410,17 @@ int main() {
 
             case setShowTemperatureDelay:
                 indicatorSetNum(4, 10, dec2bcd(showTemperature_delay) >> 4, dec2bcd(showTemperature_delay) & 0x0F);
-                delay_ms(200);
+                delay_ms(SET_BLINK_NUM_MS);
                 indicatorSetNum(4,10,10,10);
-                delay_ms(100);
+                delay_ms(SET_BLINK_BLANK_MS);
 
                 if (readInput(1)) { blinkStatusLed(1); clockMode = showTime; rtcDataChangedFlag = 1; delay_ms(100); }
 
                 if (readInput(2)) {
-                    if (showTemperature_delay == 99) showTemperature_delay = 0; else showTemperature_delay++;
+                    if (showTemperature_delay >= SHOW_DELAY_MAX) showTemperature_delay = SHOW_DELAY_MIN; else showTemperature_delay++;
                 }
                 else if (readInput(3)) {
-                    if (showTemperature_delay == 0) showTemperature_delay = 99; else showTemperature_delay--;
+                    if (showTemperature_delay <= SHOW_DELAY_MIN) showTemperature_delay = SHOW_DELAY_MAX; else showTemperature_delay--;
                 }
                 else break;
 
@@ -428,13 +434,13 @@ int main() {
 
         // enter set mode
         if (readInput(1)) { 
-            for (int i = 0; i < 31; i++) {
+            for (int i = 0; i < 21; i++) {
                 if (!(readInput(1))) break;
                 delay_ms(100);
-                if ((i == 30) & (readInput(1))) {
+                if ((i == 20) & (readInput(1))) {
                     blinkStatusLed(1);
                     indicatorSetNum(10,10,10,10);
-                    delay_ms(3000);
+                    delay_ms(2000);
                     clockMode = setHour;
                 }
             }
